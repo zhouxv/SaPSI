@@ -83,6 +83,7 @@ fn single_psi(
     port: usize,
 ) -> (u64, u64) {
     let (done_tx, done_rx) = std_mpsc::channel::<()>(); // 创建完成信号通道
+    let (tcp_done_tx, tcp_done_rx) = std_mpsc::channel::<()>(); // 创建完成信号通道
     let (statistics_tx, statistics_rx) = std_mpsc::channel(); // 创建长度通道
     let (comu_tx, comu_rx) = std_mpsc::channel(); // 创建发送和接收通道
 
@@ -109,6 +110,11 @@ fn single_psi(
         // println!("Starting as Receiver...");
         let listener: TcpListener =
             TcpListener::bind(format!("127.0.0.1:{}", port)).expect("Failed to bind to port");
+
+        tcp_done_tx
+            .send(())
+            .expect("Failed to send tcp done signal"); // 发送完成信号
+
         let (stream, _) = listener.accept().expect("Failed to accept connection");
         let mut channel = TcpChannel::new(stream);
 
@@ -161,6 +167,10 @@ fn single_psi(
     });
 
     let sender_handle = thread::spawn(move || {
+        tcp_done_rx
+            .recv()
+            .expect("Failed to receive tcp done signal"); // 接收完成信号
+
         let mut comm: u64 = 0;
         let mut param = LPN12;
         if pt_num == 1 << 8 {
