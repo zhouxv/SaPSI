@@ -24,12 +24,8 @@ use std::{env, thread};
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// 维度
-    #[arg(long, default_value_t = 2)]
-    dim: usize,
-
     /// 半径
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, short, default_value_t = 0)]
     delta_index: usize,
 
     /// sender方集合大小 log
@@ -53,14 +49,14 @@ fn gen_input(rng: &mut ChaCha12Rng) -> [u128; DIMENSION] {
     res
 }
 
-fn gen_origins(rng: &mut ChaCha12Rng, size: usize) -> Vec<[u128; DIMENSION]> {
+fn gen_origins(rng: &mut ChaCha12Rng, size: usize, range_bits: usize) -> Vec<[u128; DIMENSION]> {
     // Generate random origins first
     let pre_origin = (0..size)
         .map(|_| gen_input(rng))
         .collect::<Vec<[u128; DIMENSION]>>();
     let mut origins_set: HashSet<[u128; DIMENSION]> = HashSet::new();
     pre_origin.iter().for_each(|point| {
-        origins_set.insert(get_origin(point));
+        origins_set.insert(get_origin(point, range_bits));
     });
     let mut origins: Vec<[u128; DIMENSION]> = Vec::new();
     origins_set.iter().for_each(|point| {
@@ -70,21 +66,30 @@ fn gen_origins(rng: &mut ChaCha12Rng, size: usize) -> Vec<[u128; DIMENSION]> {
     origins
 }
 
-fn get_origin(point: &[u128; DIMENSION]) -> [u128; DIMENSION] {
+fn get_origin(point: &[u128; DIMENSION], range_bits: usize) -> [u128; DIMENSION] {
     let mut origin = [0u128; DIMENSION];
     for i in 0..DIMENSION {
         origin[i] = point[i];
-        origin[i] = (origin[i] >> RANGE_BITS) << RANGE_BITS;
+        origin[i] = (origin[i] >> range_bits) << range_bits;
     }
     origin
 }
 
-fn single_psi(pt_num: usize, dim: usize, delta: usize, port: usize) -> (u64, u64) {
+fn single_psi(
+    pt_num: usize,
+    delta: usize,
+    range_bits: usize,
+    pref_length: &[usize],
+    port: usize,
+) -> (u64, u64) {
     let (done_tx, done_rx) = std_mpsc::channel::<()>(); // 创建完成信号通道
     let (statistics_tx, statistics_rx) = std_mpsc::channel(); // 创建长度通道
     let (comu_tx, comu_rx) = std_mpsc::channel(); // 创建发送和接收通道
 
     let table_size = ((pt_num as f32) * 1.5) as usize;
+
+    let pref_length_vec_recv = pref_length.to_vec();
+    let pref_length_vec_sender = pref_length.to_vec();
 
     // 线程间通信通道
     // let (tx, rx) = std_mpsc::channel();
@@ -111,17 +116,17 @@ fn single_psi(pt_num: usize, dim: usize, delta: usize, port: usize) -> (u64, u64
             .receive_block::<32>()
             .expect("Failed to receive seed from receiver");
         let mut rng = ChaCha12Rng::from_seed(seed[0]);
-        let origins = gen_origins(&mut rng, pt_num);
+        let origins = gen_origins(&mut rng, pt_num, range_bits);
         let mut data: Vec<[u128; DIMENSION]> = Vec::new();
 
         origins.iter().for_each(|origin| {
             let mut point = gen_input(&mut rng);
             for j in 0..DIMENSION {
-                point[j] = point[j] % (1 << RANGE_BITS);
+                point[j] = point[j] % (1 << range_bits);
             }
             // println!("Origin: {:?}, Point: {:?}", origin, point);
             for j in 0..DIMENSION {
-                point[j] = (point[j] % (1 << RANGE_BITS)) + origin[j];
+                point[j] = (point[j] % (1 << range_bits)) + origin[j];
             }
             data.push(point);
 
@@ -140,7 +145,15 @@ fn single_psi(pt_num: usize, dim: usize, delta: usize, port: usize) -> (u64, u64
         let start = Instant::now();
 
         let mut receiver_psi = SAPSIReceiver::new(pt_num, table_size);
-        receiver_psi.receive(&mut channel, &data, param, &mut comm);
+        receiver_psi.receive(
+            &mut channel,
+            &data,
+            param,
+            &mut comm,
+            pt_num,
+            range_bits,
+            &pref_length_vec_recv,
+        );
 
         // println!("Total communication: {} bytes", comm);
 
@@ -172,7 +185,7 @@ fn single_psi(pt_num: usize, dim: usize, delta: usize, port: usize) -> (u64, u64
             .send_block::<32>(&[seed])
             .expect("Failed to send seed to sender");
 
-        let origin = gen_origins(&mut rng, pt_num);
+        let origin = gen_origins(&mut rng, pt_num, range_bits);
         let mut data: Vec<[u128; DIMENSION]> = Vec::new();
 
         seed = [1u8; 32];
@@ -185,11 +198,11 @@ fn single_psi(pt_num: usize, dim: usize, delta: usize, port: usize) -> (u64, u64
             let mut point = gen_input(&mut rng);
             point = gen_input(&mut rng);
             for j in 0..DIMENSION {
-                point[j] = point[j] % (1 << RANGE_BITS);
+                point[j] = point[j] % (1 << range_bits);
             }
             // println!("Origin: {:?}, Point: {:?}", origin, point);
             for j in 0..DIMENSION {
-                point[j] = (point[j] % (1 << RANGE_BITS)) + origin[j];
+                point[j] = (point[j] % (1 << range_bits)) + origin[j];
             }
             data.push(point);
 
@@ -204,8 +217,8 @@ fn single_psi(pt_num: usize, dim: usize, delta: usize, port: usize) -> (u64, u64
             }
             let mut in_range = true;
             for dim in 0..DIMENSION {
-                if (point2[dim] + (RADIUS as u128) < point[dim])
-                    || (point2[dim] > point[dim] + (RADIUS as u128))
+                if (point2[dim] + (delta as u128) < point[dim])
+                    || (point2[dim] > point[dim] + (delta as u128))
                 {
                     in_range = false;
                     break;
@@ -230,7 +243,16 @@ fn single_psi(pt_num: usize, dim: usize, delta: usize, port: usize) -> (u64, u64
         let start = Instant::now();
 
         let mut sender_psi = SAPSISender::new(pt_num, table_size);
-        sender_psi.send(&mut channel, &data, param, &mut comm);
+        sender_psi.send(
+            &mut channel,
+            &data,
+            param,
+            &mut comm,
+            pt_num,
+            delta,
+            range_bits,
+            &pref_length_vec_sender,
+        );
 
         // println!("Sender finished in {:?}", start.elapsed());
         // println!("Total communication: {} bytes", comm);
@@ -265,7 +287,6 @@ fn main() {
 
     let num = cli.num;
     let pt_num = 1 << num; // 点数量
-    let dim = cli.dim;
 
     let port = cli.port;
     let times = cli.times;
@@ -277,53 +298,53 @@ fn main() {
     let pref_length: &[usize] = RADIUS_PARAM[delta_index].2;
 
     if delta == 10 {
-        if RANGE_BITS != 6 {
-            panic!("RADIUS = 10, but RANGE_BITS != 6");
+        if range_bits != 6 {
+            panic!("delta = 10, but range_bits != 6");
         }
-        if PREF_LENGTH != [2, 4, 6] {
-            panic!("RADIUS = 10, but PREF_LENGTH != [2, 4, 6]");
+        if pref_length != [2, 4, 6] {
+            panic!("delta = 10, but pref_length != [2, 4, 6]");
         }
     } else if delta == 30 {
-        if RANGE_BITS != 7 {
-            panic!("RADIUS = 30, but RANGE_BITS != 7");
+        if range_bits != 7 {
+            panic!("delta = 30, but range_bits != 7");
         }
-        if PREF_LENGTH != [1, 3, 5, 7] {
-            panic!("RADIUS = 30, but PREF_LENGTH != [1, 3, 5, 7]");
+        if pref_length != [1, 3, 5, 7] {
+            panic!("delta = 30, but pref_length != [1, 3, 5, 7]");
         }
     } else if delta == 60 {
-        if RANGE_BITS != 8 {
-            panic!("RADIUS = 60, but RANGE_BITS != 8");
+        if range_bits != 8 {
+            panic!("delta = 60, but range_bits != 8");
         }
-        if PREF_LENGTH != [2, 4, 6, 8] {
-            panic!("RADIUS = 60, but PREF_LENGTH != [2, 4, 6, 8]");
+        if pref_length != [2, 4, 6, 8] {
+            panic!("delta = 60, but pref_length != [2, 4, 6, 8]");
         }
     } else if delta == 120 {
-        if RANGE_BITS != 9 {
-            panic!("RADIUS = 120, but RANGE_BITS != 9");
+        if range_bits != 9 {
+            panic!("delta = 120, but range_bits != 9");
         }
-        if PREF_LENGTH != [1, 3, 5, 7, 9] {
-            panic!("RADIUS = 120, but PREF_LENGTH != [1, 3, 5, 7, 9]");
+        if pref_length != [1, 3, 5, 7, 9] {
+            panic!("delta = 120, but pref_length != [1, 3, 5, 7, 9]");
         }
     } else if delta == 250 {
-        if RANGE_BITS != 10 {
-            panic!("RADIUS = 250, but RANGE_BITS != 10");
+        if range_bits != 10 {
+            panic!("delta = 250, but range_bits != 10");
         }
-        if PREF_LENGTH != [2, 4, 6, 8, 10] {
-            panic!("RADIUS = 250, but PREF_LENGTH != [2, 4, 6, 8, 10]");
+        if pref_length != [2, 4, 6, 8, 10] {
+            panic!("delta = 250, but pref_length != [2, 4, 6, 8, 10]");
         }
     } else {
-        panic!("Invalid RADIUS");
+        panic!("Invalid delta");
     }
 
-    println!(
-        "Running PSI with size: {}, radius: {}, dimension: {}",
-        pt_num, delta, dim
-    );
+    // println!(
+    //     "Running PSI with size: {}, radius: {}, dimension: {}",
+    //     pt_num, delta, DIMENSION
+    // );
 
     let mut total_time: u64 = 0;
     let mut total_commu: u64 = 0;
     for _ in 0..times {
-        let (time, commu) = single_psi(pt_num, dim, delta, port);
+        let (time, commu) = single_psi(pt_num, delta, range_bits, pref_length, port);
         total_time += time;
         total_commu += commu;
     }
@@ -334,7 +355,7 @@ fn main() {
     println!(
         "{:^5} , {:^5} , {:^5} , {:^10} 毫秒, {:^10} 字节, {:^7} 秒, {:^7.3} MB",
         pt_num,
-        dim,
+        DIMENSION,
         delta,
         avg_time_ms,
         avg_commu_bytes,

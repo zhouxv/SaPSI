@@ -10,7 +10,7 @@ use psi_volef2k::vole_triple_f2k::PrimalLPNParameterF2k;
 use rand::prelude::*;
 use std::collections::HashSet;
 use std::time::Instant;
-use std::vec;
+use std::{usize, vec};
 
 // URGENT: Need to implement OPRF
 
@@ -35,10 +35,16 @@ impl SAPSISender {
         values: &[[u128; DIMENSION]],
         param: PrimalLPNParameterF2k,
         comm: &mut u64,
+        pt_num: usize,
+        delta: usize,
+        range_bits: usize,
+        pref_length: &[usize],
     ) {
         // All (origin, recentered_point) pairs
-        let processed_points: Vec<([u128; DIMENSION], [u128; DIMENSION])> =
-            values.iter().map(|point| preprocess_point(point)).collect();
+        let processed_points: Vec<([u128; DIMENSION], [u128; DIMENSION])> = values
+            .iter()
+            .map(|point| preprocess_point(point, delta, range_bits))
+            .collect();
 
         // Run OPRF for the origins
         // Note that
@@ -46,7 +52,7 @@ impl SAPSISender {
             .iter()
             .map(|(origin, _)| *origin)
             .collect::<Vec<[u128; DIMENSION]>>();
-        let mut oprf_sender = OprfSenderF2k::<DIMENSION>::new(io, N << DIMENSION, param, comm);
+        let mut oprf_sender = OprfSenderF2k::<DIMENSION>::new(io, pt_num << DIMENSION, param, comm);
         oprf_sender.send(io, &origins, comm);
 
         // Prepare cuckoo hash table
@@ -69,7 +75,7 @@ impl SAPSISender {
         // }
 
         // Prepare OTs
-        let depth: usize = RANGE_BITS;
+        let depth: usize = range_bits;
         let mut receiver_cot = BaseCot::new(1, false);
 
         // Set up the receiver's precomputation phase
@@ -104,9 +110,8 @@ impl SAPSISender {
                 }
             } else {
                 for dim in 0..DIMENSION {
-                    let upper = transformed_point[dim] + (RADIUS as u128) + 1;
-                    let lower =
-                        (1 << RANGE_BITS) - 1 - transformed_point[dim] + (RADIUS as u128) + 1;
+                    let upper = transformed_point[dim] + (delta as u128) + 1;
+                    let lower = (1 << delta) - 1 - transformed_point[dim] + (delta as u128) + 1;
                     let alpha = upper.to_le_bytes();
                     idcf_receiver.set_alpha(alpha, 2 * (index * DIMENSION + dim));
                     let alpha = lower.to_le_bytes();
@@ -123,10 +128,10 @@ impl SAPSISender {
         for index in 0..self.table_size {
             idcf_table.push(Vec::new());
             for dim in 0..DIMENSION {
-                let mut idcf_sharing = vec![[0u8; 16]; 1 << (RANGE_BITS + 1)];
+                let mut idcf_sharing = vec![[0u8; 16]; 1 << (range_bits + 1)];
                 idcf_receiver.compute(&mut idcf_sharing, 2 * (index * DIMENSION + dim));
                 idcf_table[index].push(idcf_sharing);
-                idcf_sharing = vec![[0u8; 16]; 1 << (RANGE_BITS + 1)];
+                idcf_sharing = vec![[0u8; 16]; 1 << (range_bits + 1)];
                 idcf_receiver.compute(&mut idcf_sharing, 2 * (index * DIMENSION + dim) + 1);
                 idcf_table[index].push(idcf_sharing);
             }
@@ -168,15 +173,15 @@ impl SAPSISender {
             for dim in 0..DIMENSION {
                 let mut decompose_set = HashSet::<([u128; 2], [usize; 2])>::new();
 
-                let upper = transformed_point[dim] + RADIUS as u128 + 1;
-                let upper_decompose = set_decompose(upper);
+                let upper = transformed_point[dim] + delta as u128 + 1;
+                let upper_decompose = set_decompose(upper, range_bits);
                 upper_decompose.iter().for_each(|(point, length)| {
                     decompose_set
                         .insert(([*point, (1 << *length) - 1 - *point], [*length, *length]));
                 });
 
-                let lower = (1 << RANGE_BITS) - 1 - transformed_point[dim] + RADIUS as u128 + 1;
-                let lower_decompose = set_decompose(lower);
+                let lower = (1 << range_bits) - 1 - transformed_point[dim] + delta as u128 + 1;
+                let lower_decompose = set_decompose(lower, range_bits);
 
                 lower_decompose.iter().for_each(|(point, length)| {
                     decompose_set
@@ -225,6 +230,8 @@ impl SAPSISender {
                     &pref,
                     &length,
                     &hashes_set[index],
+                    range_bits,
+                    pref_length,
                 );
             });
 
@@ -253,11 +260,13 @@ impl SAPSISender {
         prefix: &[u128; DIMENSION2],
         length: &[usize; DIMENSION2],
         hashes: &HashSet<[u8; 16]>,
+        range_bits: usize,
+        pref_length: &[usize],
     ) {
         // println!("Current prefix: {:?}, Length: {:?}", prefix, length);
         // I'm sure that each pair of 2i, 2i+1 prefix has the same length
         for i in 0..DIMENSION {
-            if !PREF_LENGTH.contains(&length[2 * i]) {
+            if !pref_length.contains(&length[2 * i]) {
                 // println!("Brute more");
                 for b in 0..2 {
                     let mut new_prefix = prefix.clone();
@@ -275,6 +284,8 @@ impl SAPSISender {
                         &new_prefix,
                         &new_length,
                         hashes,
+                        range_bits,
+                        pref_length,
                     );
                 }
                 return;
@@ -307,7 +318,7 @@ impl SAPSISender {
             return;
         }
 
-        if *length == [RANGE_BITS; DIMENSION2] {
+        if *length == [range_bits; DIMENSION2] {
             let mut original_point = [0u128; DIMENSION];
             for i in 0..DIMENSION {
                 original_point[i] = prefix[2 * i] + origin[i];
@@ -320,7 +331,7 @@ impl SAPSISender {
 
         for i in 0..DIMENSION {
             // println!("Search more");
-            if length[2 * i] < RANGE_BITS {
+            if length[2 * i] < range_bits {
                 for b in 0..2 {
                     let mut new_prefix = prefix.clone();
                     let mut new_length = length.clone();
@@ -337,6 +348,8 @@ impl SAPSISender {
                         &new_prefix,
                         &new_length,
                         hashes,
+                        range_bits,
+                        pref_length,
                     );
                 }
                 return;
@@ -345,13 +358,17 @@ impl SAPSISender {
     }
 }
 
-fn preprocess_point(point: &[u128; DIMENSION]) -> ([u128; DIMENSION], [u128; DIMENSION]) {
+fn preprocess_point(
+    point: &[u128; DIMENSION],
+    delta: usize,
+    range_bits: usize,
+) -> ([u128; DIMENSION], [u128; DIMENSION]) {
     let mut grid_origin = [0u128; DIMENSION];
     let mut universe_origin = [0u128; DIMENSION];
     for i in 0..DIMENSION {
-        grid_origin[i] = (point[i] >> (RANGE_BITS - 1)) << (RANGE_BITS - 1);
-        if point[i] + (RADIUS as u128) + 1 < grid_origin[i] + (1 << (RANGE_BITS - 1)) {
-            universe_origin[i] = grid_origin[i] - (1 << (RANGE_BITS - 1));
+        grid_origin[i] = (point[i] >> (range_bits - 1)) << (range_bits - 1);
+        if point[i] + (delta as u128) + 1 < grid_origin[i] + (1 << (range_bits - 1)) {
+            universe_origin[i] = grid_origin[i] - (1 << (range_bits - 1));
         } else {
             universe_origin[i] = grid_origin[i];
         }
@@ -366,10 +383,10 @@ fn preprocess_point(point: &[u128; DIMENSION]) -> ([u128; DIMENSION], [u128; DIM
 }
 
 // This function returns both the prefixes and the length of these prefixes for search later
-fn set_decompose(point: u128) -> Vec<(u128, usize)> {
+fn set_decompose(point: u128, range_bits: usize) -> Vec<(u128, usize)> {
     let mut x = point;
     let mut res: Vec<(u128, usize)> = Vec::new();
-    for i in (0..RANGE_BITS).rev() {
+    for i in (0..range_bits).rev() {
         if (x & 1) == 1 {
             res.push((x ^ 1, i + 1));
         }

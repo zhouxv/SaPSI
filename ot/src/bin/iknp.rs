@@ -1,16 +1,18 @@
-extern crate psi_ot;
 extern crate psi_network;
+extern crate psi_ot;
 extern crate rand;
 
-use psi_ot::iknp::IKNP;
 use psi_network::socket_channel::TcpChannel;
+use psi_ot::iknp::IKNP;
+use rand::Rng;
 use std::env;
 use std::net::{TcpListener, TcpStream};
-use rand::Rng;
 
 fn main() {
     // Get the role argument (sender or receiver)
-    let role = env::args().nth(1).expect("Please specify 'sender' or 'receiver' as an argument");
+    let role = env::args()
+        .nth(1)
+        .expect("Please specify 'sender' or 'receiver' as an argument");
     let mut comm: u64 = 0;
 
     if role == "receiver" {
@@ -23,18 +25,18 @@ fn main() {
         let mut receiver_iknp = IKNP::new(true);
         receiver_iknp.setup_recv(&mut io, None, None, &mut comm);
 
-        const length: usize = 3000;
-        let mut data = vec![[0u8; 16]; length];
+        const LENGTH: usize = 3000;
+        let mut data = vec![[0u8; 16]; LENGTH];
         let mut rng = rand::thread_rng();
-        let r: [bool; length] = [(); length].map(|_| rng.gen_bool(0.5)); // Example choice bits
+        let r: [bool; LENGTH] = [(); LENGTH].map(|_| rng.gen_bool(0.5)); // Example choice bits
 
-        receiver_iknp.recv_cot(&mut io, &mut data, &r, length, &mut comm);
+        receiver_iknp.recv_cot(&mut io, &mut data, &r, LENGTH, &mut comm);
 
-        data = vec![[0u8; 16]; length];
-        receiver_iknp.recv_cot(&mut io, &mut data, &r, length, &mut comm);
+        data = vec![[0u8; 16]; LENGTH];
+        receiver_iknp.recv_cot(&mut io, &mut data, &r, LENGTH, &mut comm);
 
-        data = vec![[0u8; 16]; length];
-        receiver_iknp.recv_cot(&mut io, &mut data, &r, length, &mut comm);
+        data = vec![[0u8; 16]; LENGTH];
+        receiver_iknp.recv_cot(&mut io, &mut data, &r, LENGTH, &mut comm);
     } else if role == "sender" {
         // Sender logic
         // Establish connection to the receiver

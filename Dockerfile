@@ -22,11 +22,12 @@ COPY ./vole_f2k /home/vole_f2k
 COPY ./Cargo.toml /home/Cargo.toml
 COPY ./README.md /home/README.md
 
-# RUN chmod +x /home/*.sh && \
-RUN export PATH="$HOME/.cargo/bin:$PATH" && \
-    cargo build --release && \
-    cp ./target/release/psi ./
+COPY ./build_bench.sh /home/build_bench.sh
+COPY ./build_cmd.sh /home/build_cmd.sh
 
+RUN export PATH="$HOME/.cargo/bin:$PATH" && \
+    chmod +x /home/*.sh &&\
+    ./build_cmd.sh
 
 
 

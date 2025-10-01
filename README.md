@@ -21,17 +21,7 @@ To run the project:
     - N: Choose the set size 2^N. Currently we support N = 8, 12, 16.
 
 2. Run the following codes on two terminal tabs (run sender after receiver):
-
-```bash
-cargo run --release --bin psi receiver
-cargo run --release --bin psi sender
-
-cargo build --release
-cargo build --release
-
-./psi receiver port
-./psi sender port
-```
+see `build_bench.sh`
 
 # Docker
 
