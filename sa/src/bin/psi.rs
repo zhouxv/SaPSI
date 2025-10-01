@@ -93,7 +93,7 @@ fn single_psi(
 
     // 线程间通信通道
     // let (tx, rx) = std_mpsc::channel();
-    thread::spawn(move || {
+    let recv_handle = thread::spawn(move || {
         let mut comm: u64 = 0;
         let mut param = LPN12;
         if pt_num == 1 << 8 {
@@ -160,7 +160,7 @@ fn single_psi(
         comu_tx.send(comm).expect("Failed to send comm");
     });
 
-    thread::spawn(move || {
+    let sender_handle = thread::spawn(move || {
         let mut comm: u64 = 0;
         let mut param = LPN12;
         if pt_num == 1 << 8 {
@@ -269,6 +269,9 @@ fn single_psi(
 
         done_tx.send(()).expect("Failed to send done signal"); // 发送完成信号
     });
+
+    recv_handle.join().expect("Receiver thread panicked");
+    sender_handle.join().expect("Sender thread panicked");
 
     let time = statistics_rx
         .recv()
