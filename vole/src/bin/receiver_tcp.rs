@@ -1,27 +1,27 @@
-extern crate psi_vole;
 extern crate lambdaworks_math;
+extern crate psi_vole;
 
-use std::net::{TcpListener, TcpStream};
+use lambdaworks_math::field::element::FieldElement;
+use lambdaworks_math::field::fields::fft_friendly::stark_252_prime_field::Stark252PrimeField;
 use psi_vole::comm_channel::CommunicationChannel;
 use psi_vole::socket_channel::TcpChannel;
-use lambdaworks_math::field::fields::fft_friendly::stark_252_prime_field::Stark252PrimeField;
-use lambdaworks_math::field::element::FieldElement;
+use std::net::{TcpListener, TcpStream};
 use std::time::Instant;
 
 pub type F = Stark252PrimeField;
 pub type FE = FieldElement<F>;
 
 fn bench_32byte<IO: CommunicationChannel>(channel: &mut IO) {
-    const size: usize = 10000;
+    const SIZE: usize = 10000;
     let elements = [[0u8; 32]; 4];
 
     let start = Instant::now();
-    for i in 0..size {
+    for i in 0..SIZE {
         let x = channel.receive_block::<32>().unwrap();
     }
     let duration = start.elapsed();
 
-    println!("Receive {} elements in {:?}", size, duration);
+    println!("Receive {} elements in {:?}", SIZE, duration);
 }
 
 fn main() {

@@ -1,14 +1,14 @@
 // send and receive 100_000 32-byte blocks in <100ms
 
-extern crate psi_vole;
 extern crate lambdaworks_math;
+extern crate psi_vole;
 extern crate rand;
 
-use psi_vole::socket_channel::TcpChannel;
-use psi_vole::comm_channel::CommunicationChannel;
-use lambdaworks_math::field::fields::fft_friendly::stark_252_prime_field::Stark252PrimeField;
 use lambdaworks_math::field::element::FieldElement;
+use lambdaworks_math::field::fields::fft_friendly::stark_252_prime_field::Stark252PrimeField;
 use lambdaworks_math::unsigned_integer::element::UnsignedInteger;
+use psi_vole::comm_channel::CommunicationChannel;
+use psi_vole::socket_channel::TcpChannel;
 use rand::random;
 use std::net::TcpStream;
 use std::time::Instant;
@@ -22,16 +22,16 @@ pub fn rand_field_element() -> FE {
 }
 
 fn bench_32byte<IO: CommunicationChannel>(channel: &mut IO) {
-    const size: usize = 10000;
+    const SIZE: usize = 10000;
     let elements = [[0u8; 32]; 4];
 
     let start = Instant::now();
-    for i in 0..size {
+    for i in 0..SIZE {
         channel.send_block::<32>(&elements).unwrap();
     }
     let duration = start.elapsed();
 
-    println!("Sent {} elements in {:?}", size, duration);
+    println!("Sent {} elements in {:?}", SIZE, duration);
 }
 
 fn main() {
@@ -42,9 +42,7 @@ fn main() {
     let mut channel = TcpChannel::new(stream);
 
     // Generate random elements
-    let elements: Vec<FE> = (0..element_count)
-        .map(|_| rand_field_element())
-        .collect();
+    let elements: Vec<FE> = (0..element_count).map(|_| rand_field_element()).collect();
 
     // Benchmark send_stark252
     let start = Instant::now();
@@ -55,12 +53,16 @@ fn main() {
 
     println!("Sent {} elements in {:?}", element_count, duration);
 
-     // Bits to send
-    let bits_to_send = vec![true, false, true, true, false, true, false, false, true, true];
+    // Bits to send
+    let bits_to_send = vec![
+        true, false, true, true, false, true, false, false, true, true,
+    ];
     println!("Sender: Sending bits: {:?}", bits_to_send);
 
     // Send the bits
-    channel.send_bits(&bits_to_send).expect("Failed to send bits");
+    channel
+        .send_bits(&bits_to_send)
+        .expect("Failed to send bits");
 
     println!("Sender: Bits sent successfully.");
 

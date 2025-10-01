@@ -5,10 +5,10 @@
 extern crate lambdaworks_math;
 extern crate rand;
 
-use lambdaworks_math::field::fields::fft_friendly::stark_252_prime_field::Stark252PrimeField;
 use lambdaworks_math::field::element::FieldElement;
-use lambdaworks_math::unsigned_integer::element::UnsignedInteger;
+use lambdaworks_math::field::fields::fft_friendly::stark_252_prime_field::Stark252PrimeField;
 use lambdaworks_math::traits::ByteConversion;
+use lambdaworks_math::unsigned_integer::element::UnsignedInteger;
 use rand::random;
 use std::time::Instant;
 
@@ -21,43 +21,42 @@ pub fn rand_field_element() -> FE {
 }
 
 fn main() {
-    const size: usize = 100000;
-    let mut x = [FE::zero(); size];
-    for i in 0..size {
+    const SIZE: usize = 100000;
+    let mut x = [FE::zero(); SIZE];
+    for i in 0..SIZE {
         x[i] = rand_field_element();
     }
 
-
-    let mut y = [[0u8; 32]; size];
+    let mut y = [[0u8; 32]; SIZE];
 
     let start = Instant::now();
 
-    for i in 0..size {
+    for i in 0..SIZE {
         y[i] = x[i].to_bytes_le();
     }
 
     let duration = start.elapsed();
-    println!("Time taken for {} iterations: {:?}", size, duration);
+    println!("Time taken for {} iterations: {:?}", SIZE, duration);
 
     let mut u = FE::zero();
     let start = Instant::now();
 
-    for i in 0..size {
+    for i in 0..SIZE {
         u += x[i];
     }
 
     let duration = start.elapsed();
-    println!("Time taken for {} iterations: {:?}", size, duration);
+    println!("Time taken for {} iterations: {:?}", SIZE, duration);
 
     let mut v = FE::one();
     let start = Instant::now();
 
-    for i in 0..size {
+    for i in 0..SIZE {
         v *= x[i];
     }
 
     let duration = start.elapsed();
-    println!("Time taken for {} iterations: {:?}", size, duration);
+    println!("Time taken for {} iterations: {:?}", SIZE, duration);
 
     let mut mem = [[FE::zero(); 16]; 600];
     for i in 0..600 {

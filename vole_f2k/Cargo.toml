@@ -15,21 +15,3 @@ psi-okvs = { workspace = true }
 blake3 = "1.8.2"
 rand = "0.8"
 rand_chacha = "0.9.0"
-
-[[bin]]
-name = "test_spfss_f2k"
-
-[[bin]]
-name = "test_cope_f2k"
-
-[[bin]]
-name = "test_mpfss_f2k"
-
-[[bin]]
-name = "test_base_svole_f2k"
-
-[[bin]]
-name = "test_vole_triple_f2k"
-
-[[bin]]
-name = "test_oprf_f2k"

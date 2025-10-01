@@ -1,17 +1,17 @@
 use crate::config::*;
-use crate::cuckoo::SimpleHash; 
+use crate::cuckoo::SimpleHash;
 use crate::idcf_sender::IDCFSender;
+use blake3;
+use psi_network::comm_channel::CommunicationChannel;
 use psi_ot::base_cot::BaseCot;
 use psi_ot::pre_ot::OTPre;
-use psi_network::comm_channel::CommunicationChannel;
 use psi_volef2k::oprf_receiver_f2k::OprfReceiverF2k;
 use psi_volef2k::vole_triple_f2k::PrimalLPNParameterF2k;
 use rand::prelude::*;
-use blake3;
-use std::collections::HashSet;
-use std::time::Instant;
 use std::cmp::max;
+use std::collections::HashSet;
 use std::convert::TryInto;
+use std::time::Instant;
 
 pub struct SAPSIReceiver {
     n: usize,
@@ -20,16 +20,19 @@ pub struct SAPSIReceiver {
 
 impl SAPSIReceiver {
     pub fn new(n: usize, table_size: usize) -> Self {
-        SAPSIReceiver {
-            n,
-            table_size,
-        }
+        SAPSIReceiver { n, table_size }
     }
 
-    pub fn receive<IO: CommunicationChannel>(&self, io: &mut IO, values: &[[u128; DIMENSION]], param: PrimalLPNParameterF2k, comm: &mut u64) {
+    pub fn receive<IO: CommunicationChannel>(
+        &self,
+        io: &mut IO,
+        values: &[[u128; DIMENSION]],
+        param: PrimalLPNParameterF2k,
+        comm: &mut u64,
+    ) {
         let mut processed_points: Vec<([u128; DIMENSION], [u128; DIMENSION])> = Vec::new();
         values.iter().for_each(|point| {
-            let processed_point= preprocess_point(point);
+            let processed_point = preprocess_point(point);
             // processed_point.iter().for_each(|(origin, transformed_point)| {
             //     println!("Origin: {:?}, Transformed Point: {:?}", origin, transformed_point);
             // });
@@ -39,20 +42,26 @@ impl SAPSIReceiver {
         println!("Origin length: {}", processed_points.len());
 
         // Run OPRF for the origins
-        let origins = processed_points.iter().map(|(origin, _)| *origin).collect::<Vec<[u128; DIMENSION]>>();
-        
+        let origins = processed_points
+            .iter()
+            .map(|(origin, _)| *origin)
+            .collect::<Vec<[u128; DIMENSION]>>();
+
         let start = Instant::now();
         let mut oprf_receiver = OprfReceiverF2k::<DIMENSION>::new(io, N << DIMENSION, param, comm);
         println!("Receiver setup OPRF in {:?}", start.elapsed());
         oprf_receiver.receive(io, &origins, comm);
         println!("Receiver computed OPRF in {:?}", start.elapsed());
 
-        let mut simple_table = SimpleHash::<DIMENSION>::new(self.table_size, 100000, LOC_FUNC_COUNT);
+        let mut simple_table =
+            SimpleHash::<DIMENSION>::new(self.table_size, 100000, LOC_FUNC_COUNT);
         simple_table.generate_loc_funcs(LOC_FUNC_COUNT, Some([0u8; 16]));
-        processed_points.iter().for_each(|(origin, transformed_point)| {
-            let res: bool = simple_table.insert(origin, transformed_point);
-            assert!(res, "Insertion failed");
-        });
+        processed_points
+            .iter()
+            .for_each(|(origin, transformed_point)| {
+                let res: bool = simple_table.insert(origin, transformed_point);
+                assert!(res, "Insertion failed");
+            });
 
         let mut idcf_table = Vec::<Vec<Vec<[u8; 16]>>>::new();
 
@@ -89,19 +98,28 @@ impl SAPSIReceiver {
             for dim in 0..DIMENSION {
                 let mut idcf_sharing = vec![[0u8; 16]; 1 << (RANGE_BITS + 1)];
                 let idcf_time = 2 * (index * DIMENSION + dim);
-                idcf_sender.compute(&mut idcf_sharing, key[idcf_time], beta[idcf_time], idcf_time);
+                idcf_sender.compute(
+                    &mut idcf_sharing,
+                    key[idcf_time],
+                    beta[idcf_time],
+                    idcf_time,
+                );
                 idcf_table[index].push(idcf_sharing);
 
                 idcf_sharing = vec![[0u8; 16]; 1 << (RANGE_BITS + 1)];
                 let idcf_time = 2 * (index * DIMENSION + dim) + 1;
-                idcf_sender.compute(&mut idcf_sharing, key[idcf_time], beta[idcf_time], idcf_time);
+                idcf_sender.compute(
+                    &mut idcf_sharing,
+                    key[idcf_time],
+                    beta[idcf_time],
+                    idcf_time,
+                );
                 idcf_table[index].push(idcf_sharing);
             }
-
         }
-            
+
         println!("Receiver computed IDCF in {:?}", start.elapsed());
-        
+
         let start = Instant::now();
         idcf_sender.send(io, &mut sender_pre_ot, comm);
         println!("Receiver sent IDCF in {:?}", start.elapsed());
@@ -113,7 +131,6 @@ impl SAPSIReceiver {
         //         idcf_sender.consistency_check(io, &idcf_table[index][dim], index * DIMENSION2 + dim);
         //     }
         // }
-
 
         // Send the hash values
         let start = Instant::now();
@@ -144,17 +161,27 @@ impl SAPSIReceiver {
                     // Get the corresponding hash
                     to_be_hashed.clear();
                     to_be_hashed.extend_from_slice(&index.to_le_bytes());
-                    let origin_oprf = oprf_receiver.get_output(origin).expect("Failed to get oprf output for receiver");
+                    let origin_oprf = oprf_receiver
+                        .get_output(origin)
+                        .expect("Failed to get oprf output for receiver");
                     for i in 0..DIMENSION {
                         to_be_hashed.extend_from_slice(&origin_oprf); // Change to OPRF later
                     }
                     for i in 0..DIMENSION {
                         to_be_hashed.extend_from_slice(&prefix[i].to_le_bytes());
-                        to_be_hashed.extend_from_slice(&((1 << length[i]) - 1 - prefix[i]).to_le_bytes());
+                        to_be_hashed
+                            .extend_from_slice(&((1 << length[i]) - 1 - prefix[i]).to_le_bytes());
                     }
                     for i in 0..DIMENSION {
-                        to_be_hashed.extend_from_slice(idcf_table[index][2*i][(1 << length[i]) - 1 + prefix[i] as usize].as_slice());
-                        to_be_hashed.extend_from_slice(idcf_table[index][2*i+1][(1 << length[i]) - 1 + (1 << length[i]) - 1 - prefix[i] as usize].as_slice()); // check prefix length
+                        to_be_hashed.extend_from_slice(
+                            idcf_table[index][2 * i][(1 << length[i]) - 1 + prefix[i] as usize]
+                                .as_slice(),
+                        );
+                        to_be_hashed.extend_from_slice(
+                            idcf_table[index][2 * i + 1]
+                                [(1 << length[i]) - 1 + (1 << length[i]) - 1 - prefix[i] as usize]
+                                .as_slice(),
+                        ); // check prefix length
                     }
                     let hash1 = blake3::hash(&to_be_hashed);
                     let mut hsh = [0u8; 16];
@@ -193,9 +220,10 @@ impl SAPSIReceiver {
         //     }
         // }
 
-
         for index in 0..self.table_size {
-            *comm += io.send_block::<16>(&hash_vecs[index]).expect("Failed to send intersection hash");
+            *comm += io
+                .send_block::<16>(&hash_vecs[index])
+                .expect("Failed to send intersection hash");
             hash_vecs[index].clear();
         }
     }
@@ -209,7 +237,7 @@ fn preprocess_point(point: &[u128; DIMENSION]) -> Vec<([u128; DIMENSION], [u128;
     }
 
     for mask in 0..(1 << DIMENSION) {
-        let mut universe_origin= grid_origin.clone();
+        let mut universe_origin = grid_origin.clone();
         for i in 0..DIMENSION {
             if (mask >> i) & 1 == 1 {
                 universe_origin[i] -= (1 << (RANGE_BITS - 1));
@@ -234,14 +262,13 @@ fn get_prefixes(point: &[u128; DIMENSION]) -> Vec<([u128; DIMENSION], [usize; DI
             let mut new_prefix = prefix.clone();
             let mut new_length = length.clone();
             for j in (0..RANGE_BITS).rev() {
-                if PREF_LENGTH.contains(&(j+1)) {
+                if PREF_LENGTH.contains(&(j + 1)) {
                     new_prefixes_and_lengths.push((new_prefix, new_length));
                 }
                 new_prefix[i] >>= 1;
                 new_length[i] -= 1;
             }
         });
-
 
         prefixes_and_lengths = new_prefixes_and_lengths;
     }
