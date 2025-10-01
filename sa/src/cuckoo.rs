@@ -1,8 +1,7 @@
-use sha3::{Digest, Sha3_256};
+use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
 use aes::Aes128;
-use aes::cipher::{BlockEncrypt, KeyInit, generic_array::GenericArray};
 use rand::Rng;
-
+use sha3::{Digest, Sha3_256};
 
 // Cuckoo hash table implementation
 // I do not use stash here. If the insert operation fails, the item will not be put into a stash
@@ -53,7 +52,7 @@ impl<const NUM_LIMBS: usize> CuckooHash<NUM_LIMBS> {
             self.loc_funcs[i].copy_from_slice(block.as_slice());
         }
 
-        println!("loc_funcs: {:?}", self.loc_funcs);
+        // println!("loc_funcs: {:?}", self.loc_funcs);
     }
 
     pub fn location(&self, item: &[u128; NUM_LIMBS], loc_func_index: usize) -> usize {
@@ -122,7 +121,7 @@ impl<const NUM_LIMBS: usize> CuckooHash<NUM_LIMBS> {
             rng.fill(&mut loc_bytes);
             let mut rand_loc_func_index = usize::from_le_bytes(loc_bytes) % self.loc_funcs.len();
             let swap_location = self.location(&curr_key, rand_loc_func_index);
-            
+
             let mut temp = self.table[swap_location];
             self.table[swap_location] = (curr_key, curr_value);
             (curr_key, curr_value) = temp;
@@ -187,7 +186,7 @@ impl<const NUM_LIMBS: usize> SimpleHash<NUM_LIMBS> {
             self.loc_funcs[i].copy_from_slice(block.as_slice());
         }
 
-        println!("loc_funcs: {:?}", self.loc_funcs);
+        // println!("loc_funcs: {:?}", self.loc_funcs);
     }
 
     pub fn location(&self, item: &[u128; NUM_LIMBS], loc_func_index: usize) -> usize {

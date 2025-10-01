@@ -39,7 +39,7 @@ impl SAPSIReceiver {
             processed_points.extend_from_slice(processed_point.as_slice());
         });
 
-        println!("Origin length: {}", processed_points.len());
+        // println!("Origin length: {}", processed_points.len());
 
         // Run OPRF for the origins
         let origins = processed_points
@@ -49,9 +49,9 @@ impl SAPSIReceiver {
 
         let start = Instant::now();
         let mut oprf_receiver = OprfReceiverF2k::<DIMENSION>::new(io, N << DIMENSION, param, comm);
-        println!("Receiver setup OPRF in {:?}", start.elapsed());
+        // println!("Receiver setup OPRF in {:?}", start.elapsed());
         oprf_receiver.receive(io, &origins, comm);
-        println!("Receiver computed OPRF in {:?}", start.elapsed());
+        // println!("Receiver computed OPRF in {:?}", start.elapsed());
 
         let mut simple_table =
             SimpleHash::<DIMENSION>::new(self.table_size, 100000, LOC_FUNC_COUNT);
@@ -118,13 +118,13 @@ impl SAPSIReceiver {
             }
         }
 
-        println!("Receiver computed IDCF in {:?}", start.elapsed());
+        // println!("Receiver computed IDCF in {:?}", start.elapsed());
 
         let start = Instant::now();
         idcf_sender.send(io, &mut sender_pre_ot, comm);
-        println!("Receiver sent IDCF in {:?}", start.elapsed());
+        // println!("Receiver sent IDCF in {:?}", start.elapsed());
 
-        println!("Receiver communication after IDCF: {}", *comm);
+        // println!("Receiver communication after IDCF: {}", *comm);
 
         // for index in 0..self.table_size {
         //     for dim in 0..DIMENSION2 {
@@ -205,11 +205,11 @@ impl SAPSIReceiver {
             max_bin_size = max(max_bin_size, points_set.len());
         }
 
-        println!("Max bin size: {}", max_bin_size);
-        println!("Total size: {}", total_size);
-        println!("Num hashes: {}", num_hashes);
+        // println!("Max bin size: {}", max_bin_size);
+        // println!("Total size: {}", total_size);
+        // println!("Num hashes: {}", num_hashes);
 
-        println!("Receiver computed hashes in {:?}", start.elapsed());
+        // println!("Receiver computed hashes in {:?}", start.elapsed());
 
         // for dim in 0..DIMENSION2 {
         //     for layer in 1..(depth + 1) {

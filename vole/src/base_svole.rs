@@ -1,17 +1,17 @@
-use crate::cope::Cope;
-use psi_aes::prg::PRG;
 use crate::comm_channel::CommunicationChannel;
-use lambdaworks_math::field::fields::fft_friendly::stark_252_prime_field::Stark252PrimeField;
+use crate::cope::Cope;
 use lambdaworks_math::field::element::FieldElement;
+use lambdaworks_math::field::fields::fft_friendly::stark_252_prime_field::Stark252PrimeField;
 use lambdaworks_math::field::traits::IsPrimeField;
+use psi_aes::prg::PRG;
 
 pub type F = Stark252PrimeField;
 pub type FE = FieldElement<F>;
 
 pub struct BaseSvole {
-    party: u8,              // 0 for sender, 1 for receiver
-    cope: Cope,     // COPE instance
-    delta: Option<FE>,      // Delta for the sender
+    party: u8,         // 0 for sender, 1 for receiver
+    cope: Cope,        // COPE instance
+    delta: Option<FE>, // Delta for the sender
 }
 
 impl BaseSvole {
@@ -38,7 +38,13 @@ impl BaseSvole {
     }
 
     /// Sender: Triple generation
-    pub fn triple_gen_send<IO: CommunicationChannel>(&mut self, io: &mut IO, share: &mut [FE], size: usize, comm: &mut u64) {
+    pub fn triple_gen_send<IO: CommunicationChannel>(
+        &mut self,
+        io: &mut IO,
+        share: &mut [FE],
+        size: usize,
+        comm: &mut u64,
+    ) {
         // Generate share_recv = share_send + delta * u_recv
         self.cope.extend_sender_batch(io, share, size, comm);
         let mut b = vec![FE::zero(); 1];
@@ -47,7 +53,14 @@ impl BaseSvole {
     }
 
     /// Receiver: Triple generation
-    pub fn triple_gen_recv<IO: CommunicationChannel>(&mut self, io: &mut IO, share: &mut [FE], u: &mut [FE], size: usize, comm: &mut u64) {
+    pub fn triple_gen_recv<IO: CommunicationChannel>(
+        &mut self,
+        io: &mut IO,
+        share: &mut [FE],
+        u: &mut [FE],
+        size: usize,
+        comm: &mut u64,
+    ) {
         // Generate share_recv = share_send + delta * u_recv
         let mut prg = PRG::new(None, 0);
         let mut x = vec![FE::zero(); 1];
@@ -64,12 +77,21 @@ impl BaseSvole {
     }
 
     /// Sender: Consistency check
-    fn sender_check<IO: CommunicationChannel>(&mut self, io: &mut IO, share: &[FE], b: FE, size: usize, comm: &mut u64) {
+    fn sender_check<IO: CommunicationChannel>(
+        &mut self,
+        io: &mut IO,
+        share: &[FE],
+        b: FE,
+        size: usize,
+        comm: &mut u64,
+    ) {
         // Generate check seed and send it to Receiver
         let mut seed = vec![[0u8; 16]; 1];
         let mut seed_prg = PRG::new(None, 0);
         seed_prg.random_16byte_block(&mut seed);
-        *comm += io.send_block::<16>(&seed).expect("Send seed for svole check failed");
+        *comm += io
+            .send_block::<16>(&seed)
+            .expect("Send seed for svole check failed");
 
         let chi = self.generate_hash_coeff(seed[0], size);
 
@@ -81,13 +103,24 @@ impl BaseSvole {
         if y_check != xz[0] {
             panic!("Base sVOLE check failed!");
         } else {
-            println!("Base sVOLE generated successfully!");
+            // println!("Base sVOLE generated successfully!");
         }
     }
 
     /// Receiver: Consistency check
-    fn receiver_check<IO: CommunicationChannel>(&mut self, io: &mut IO, share: &[FE], x: &[FE], c: FE, a: FE, size: usize, comm: &mut u64) {
-        let seed = io.receive_block::<16>().expect("Cannot receive seed for check base sVOLE")[0];
+    fn receiver_check<IO: CommunicationChannel>(
+        &mut self,
+        io: &mut IO,
+        share: &[FE],
+        x: &[FE],
+        c: FE,
+        a: FE,
+        size: usize,
+        comm: &mut u64,
+    ) {
+        let seed = io
+            .receive_block::<16>()
+            .expect("Cannot receive seed for check base sVOLE")[0];
 
         let chi = self.generate_hash_coeff(seed, size);
 
@@ -107,6 +140,8 @@ impl BaseSvole {
 
     /// Compute modular inner product
     fn vector_inner_product_mod(&self, vec1: &[FE], vec2: &[FE]) -> FE {
-        vec1.iter().zip(vec2).fold(FE::zero(), |acc, (v1, v2)| acc + (*v1 * *v2))
+        vec1.iter()
+            .zip(vec2)
+            .fold(FE::zero(), |acc, (v1, v2)| acc + (*v1 * *v2))
     }
 }
