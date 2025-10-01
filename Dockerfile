@@ -21,14 +21,14 @@ COPY ./vole /home/vole
 COPY ./vole_f2k /home/vole_f2k
 COPY ./Cargo.toml /home/Cargo.toml
 COPY ./README.md /home/README.md
-
-COPY ./build_bench.sh /home/build_bench.sh
 COPY ./build_cmd.sh /home/build_cmd.sh
 
 RUN export PATH="$HOME/.cargo/bin:$PATH" && \
-    chmod +x /home/*.sh &&\
+    chmod +x /home/build_cmd.sh &&\
     ./build_cmd.sh
 
+COPY ./run_bench.sh /home/run_bench.sh
+RUN chmod +x /home/run_bench.sh
 
 
 

@@ -37,4 +37,5 @@ docker push blueobsidian/sapsi_balance:latest
 
 ```bash
 sudo docker run -dit --name sapsi_balance --cap-add=NET_ADMIN sapsi_balance:latest
+nohup ./run_bench.sh > sapsi_balance.log 2>&1 &
 ```
