@@ -41,6 +41,13 @@ struct Cli {
     port: usize,
 }
 
+/// 生成一个随机的高维点
+///
+/// # 参数
+/// * `rng` - ChaCha12 随机数生成器的可变引用
+///
+/// # 返回值
+/// 返回一个长度为 DIMENSION 的 u128 数组，每个元素都是 128 位的随机数
 fn gen_input(rng: &mut ChaCha12Rng) -> [u128; DIMENSION] {
     let mut res = [0u128; DIMENSION];
     for i in 0..DIMENSION {
@@ -49,6 +56,15 @@ fn gen_input(rng: &mut ChaCha12Rng) -> [u128; DIMENSION] {
     res
 }
 
+/// 生成指定数量的原点（origin），确保去重并排序
+///
+/// # 参数
+/// * `rng` - ChaCha12 随机数生成器的可变引用
+/// * `size` - 要生成的点数量
+/// * `range_bits` - 范围位数，用于计算原点
+///
+/// # 返回值
+/// 返回一个排序后的原点向量，每个原点是长度为 DIMENSION 的 u128 数组
 fn gen_origins(rng: &mut ChaCha12Rng, size: usize, range_bits: usize) -> Vec<[u128; DIMENSION]> {
     // Generate random origins first
     let pre_origin = (0..size)
@@ -66,6 +82,14 @@ fn gen_origins(rng: &mut ChaCha12Rng, size: usize, range_bits: usize) -> Vec<[u1
     origins
 }
 
+/// 根据范围位数计算点的原点（去掉低 range_bits 位）
+///
+/// # 参数
+/// * `point` - 输入点的引用
+/// * `range_bits` - 范围位数
+///
+/// # 返回值
+/// 返回原点坐标，其中每维的低 range_bits 位都被清零
 fn get_origin(point: &[u128; DIMENSION], range_bits: usize) -> [u128; DIMENSION] {
     let mut origin = [0u128; DIMENSION];
     for i in 0..DIMENSION {
@@ -75,6 +99,25 @@ fn get_origin(point: &[u128; DIMENSION], range_bits: usize) -> [u128; DIMENSION]
     origin
 }
 
+/// 执行一次完整的 PSI（私密集合交集）协议
+///
+/// 启动两个线程分别模拟 Receiver 和 Sender，通过 TCP 通信执行密码学 PSI 协议。
+/// Receiver 先绑定端口监听，Sender 再连接；两个线程通过 channel 同步。
+///
+/// # 参数
+/// * `pt_num` - 点的数量（必须是 2^8、2^12 或 2^16）
+/// * `delta` - 搜索半径
+/// * `range_bits` - 范围位数
+/// * `pref_length` - 前缀长度数组的切片
+/// * `port` - TCP 通信的端口号
+///
+/// # 返回值
+/// 返回一个元组 `(time, comm)`：
+/// * `time` - 执行时间（毫秒）
+/// * `comm` - 总通信字节数
+///
+/// # Panics
+/// 当点数不合法、网络连接失败或线程执行失败时会 panic
 fn single_psi(
     pt_num: usize,
     delta: usize,

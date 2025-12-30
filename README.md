@@ -28,15 +28,15 @@ see `build_bench.sh`
 ## build img
 
 ```bash
-sudo docker build -t sapsi_balance:latest .
-docker tag sapsi_balance:latest blueobsidian/sapsi_balance:latest
-docker push blueobsidian/sapsi_balance:latest
+sudo docker build -t fpsi_sa:latest .
+docker tag fpsi_sa:latest blueobsidian/fpsi_sa:latest
+docker push blueobsidian/fpsi_sa:latest
 ```
 
 ## run container
 
 ```bash
-sudo docker run -dit --name sapsi_balance --cap-add=NET_ADMIN sapsi_balance:latest
-sudo docker run -dit --name sapsi_balance --cap-add=NET_ADMIN blueobsidian/sapsi_balance:latest
-nohup ./run_bench.sh > sapsi_balance.log 2>&1 &
+sudo docker run -dit --name fpsi_sa --cap-add=NET_ADMIN fpsi_sa:latest
+sudo docker run -dit --name fpsi_sa --cap-add=NET_ADMIN blueobsidian/fpsi_sa:latest
+nohup ./run_bench.sh > fpsi_sa.log 2>&1 &
 ```
